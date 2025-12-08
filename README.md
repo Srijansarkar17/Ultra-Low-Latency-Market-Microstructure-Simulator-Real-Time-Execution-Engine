@@ -23,3 +23,9 @@ Key information in a typical depth event includes:
 Price Level: A specific price point in the order book.
 Aggregated Quantity: The total volume of orders waiting to be filled at that specific price.
 Updates: Notifications for additions, modifications, or removals of orders from the order book. 
+
+
+### Meaning of recv() in Websockets
+Wait for the next message from the WebSocket server and return it.
+It's an asynchronous receive. Your code pauses until the next message arrives.
+It does NOT block the entire program — only this coroutine pauses.
