@@ -115,6 +115,21 @@ class MarketDecoder: # This class only converts raw Binance JSON → your DepthD
             bids=bids, 
             asks=asks,
         )
+    
+    def _trade_from_payload(self, d: dict, ts_recv_us: int):
+        evt_us = self._to_us(d.get("E"), ts_recv_us)
+        taker_side = "sell" if d.get("m", True) else "buy" # m = true → buyer is market maker → taker is seller, m = false → taker is buyer
+        return Trade( #return a clean object
+            etype="trade",
+            ts_event_us=evt_us,
+            ts_recv_us=ts_recv_us,
+            symbol=d.get("s", "UNKNOWN"),
+            trade_id=int(d["t"]),
+            price=float(d["p"]),
+            qty=float(d["q"]),
+            taker_side=taker_side,
+        )
+
 
 
 
