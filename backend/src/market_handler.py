@@ -14,7 +14,7 @@ class DepthDiff:
     u: int               # last update id
     pu: Optional[int]    # previous final update id (may be None)
     bids: List[Tuple[float, float]]  # [(price, qty), ...]
-    asks: List[Tuple[float, float]]. # bids and asks are lists of (price, quantity) updates.
+    asks: List[Tuple[float, float]] # bids and asks are lists of (price, quantity) updates.
 
 
 @dataclass
@@ -87,6 +87,7 @@ class MarketDecoder: # This class only converts raw Binance JSON → your DepthD
         return None # it is neither depthUpdate nor trade
 
     # When you're using combined streams, Binance sends data like this
+    #this function is called at the end of the parse_combined function
     def _parse_stream(self, stream: str, data: dict, ts_recv_us: int): # Look at the "stream" name, Decide if it is a depth update or trade
         # Depth streams end with "@depth" or "@depth@100ms"
         if stream.endswith("@depth") or stream.endswith("@depth@100ms"):
@@ -95,6 +96,32 @@ class MarketDecoder: # This class only converts raw Binance JSON → your DepthD
         if stream.endswith("@trade"):
             return self._trade_from_payload(data, ts_recv_us)
         return None
+    
+    def _depth_from_payload(self, d: dict, ts_recv_us: int): 
+        evt_us = self._to_us(d.get("E"), ts_recv_us) #self._to_us is a function written in this code that converts into microseconds, if Binance didn't send E, then fallback to ts_recv_us.
+
+        bids = [(float(p), float(q)) for p, q in d.get("b", [])] # d.get("b", []) = list of bid updates,  Each bid is [price, quantity], Convert both to floats, Output shape: [(price, qty), (price, qty), ...]
+
+        asks = [(float(p), float(q)) for p, q in d.get("a", [])] # same thing as bids but for asks
+
+        return DepthDiff( # this creates a clean object
+            etype="depth_diff", # So your system knows this is a depth update.
+            ts_event_us=evt_us,
+            ts_recv_us=ts_recv_us,
+            symbol=d.get("s", "UNKNOWN"),
+            U=int(d["U"]),
+            u=int(d["u"]),
+            pu=int(d["pu"]) if "pu" in d and d["pu"] is not None else None,
+            bids=bids,
+            asks=asks,
+        )
+
+
+
+
+
+
+
 
 
 
