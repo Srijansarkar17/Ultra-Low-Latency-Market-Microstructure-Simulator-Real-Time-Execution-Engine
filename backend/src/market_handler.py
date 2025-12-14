@@ -106,13 +106,13 @@ class MarketDecoder: # This class only converts raw Binance JSON → your DepthD
 
         return DepthDiff( # this creates a clean object
             etype="depth_diff", # So your system knows this is a depth update.
-            ts_event_us=evt_us,
-            ts_recv_us=ts_recv_us,
-            symbol=d.get("s", "UNKNOWN"),
-            U=int(d["U"]),
-            u=int(d["u"]),
-            pu=int(d["pu"]) if "pu" in d and d["pu"] is not None else None,
-            bids=bids,
+            ts_event_us=evt_us, # When Binance created the event.
+            ts_recv_us=ts_recv_us, # When YOU received it.
+            symbol=d.get("s", "UNKNOWN"), # E.g., "BTCUSDT"
+            U=int(d["U"]), # first update id
+            u=int(d["u"]), # last update id. # These sequence numbers(first update id and last update id) help you keep the order book consistent.
+            pu=int(d["pu"]) if "pu" in d and d["pu"] is not None else None, # If Binance includes "pu" (previous update ID), keep it; otherwise use None
+            bids=bids, 
             asks=asks,
         )
 
