@@ -90,3 +90,30 @@ m – is buyer the market maker?
 true → taker was a seller (price moved down / hit the bid)
 
 false → taker was a buyer (price moved up / lifted the ask)
+
+
+
+### Order Book Engine
+What the Order Book Engine does (in simple words)
+
+It takes DepthDiff events and maintains:
+
+- Current bids (price → quantity)
+
+- Current asks (price → quantity)
+
+- Correct sequence order
+
+- Detects missed updates
+
+Outputs:
+
+- Best bid
+
+- Best ask
+
+- Spread
+
+- (later) imbalance, microprice
+
+This is exactly what real HFT feed handlers do.
