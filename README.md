@@ -117,3 +117,20 @@ Outputs:
 - (later) imbalance, microprice
 
 This is exactly what real HFT feed handlers do.
+
+
+### How Order Book Engines work
+Start
+ ↓
+Receive diffs → BUFFER
+ ↓
+Fetch SNAPSHOT
+ ↓
+Find first diff where:
+U ≤ lastUpdateId + 1 ≤ u
+ ↓
+Apply diffs
+ ↓
+Set synced = True
+ ↓
+Continue live updates
