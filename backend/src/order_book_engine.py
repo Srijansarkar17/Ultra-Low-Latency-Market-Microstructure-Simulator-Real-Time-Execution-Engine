@@ -68,7 +68,10 @@ class OrderBookEngine:
         self.last_update_id = data["lastUpdateId"]
         self.synced = False # Why? You fetched snapshot But you haven’t replayed buffered diffs yet So the book is not live yet.
 
-        
+
+    
+
+
 
 
 
