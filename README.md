@@ -124,7 +124,7 @@ Start
  ↓
 Receive diffs → BUFFER
  ↓
-Fetch SNAPSHOT
+Fetch SNAPSHOT(REST) -> We use REST API to get the full order from Binance when we fall out of sync
  ↓
 Find first diff where:
 U ≤ lastUpdateId + 1 ≤ u
@@ -149,3 +149,51 @@ This class will:
 - Tell you best bid/ask
 
 - self.buffer = deque(maxlen=5000) # Using Double Ended Queue for fast insertions and removals from both ends.
+
+
+### BIG CONFUSION: “Why REST API if I already have WebSocket data?”
+
+This is the most important concept 👇
+
+🚨 WebSocket depth data is NOT a full order book
+
+What you receive from WebSocket:
+
+{
+  "U": 82735727088,
+  "u": 82735727098,
+  "b": [["90105.00", "3.38"]],
+  "a": [["90106.20", "0.51"]]
+}
+
+
+This means:
+
+“Change these price levels”
+
+It does NOT mean:
+
+“This is the full book”
+
+“Here is the starting state”
+
+🧠 Why snapshot is mandatory (real-world analogy)
+Imagine WhatsApp messages
+
+You join a group late.
+
+Messages you receive:
+“Delete message”, “Edit message”, “React 👍”
+
+❓ But delete/edit what message?
+
+You first need:
+
+The full chat history
+
+That’s the snapshot
+
+#### You must re-snapshot if ANY of these happen:
+        # - Sequence gap detected ,  Expected next update id = last_update_id + 1, But received U > last_update_id + 1
+        # - WebSocket reconnect - If your WS disconnects for even 1 second, then we need re-snapshot
+        # - Engine restart / crash , then we Re-Snapshot
