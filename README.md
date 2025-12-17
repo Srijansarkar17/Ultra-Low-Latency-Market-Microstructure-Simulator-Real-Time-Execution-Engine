@@ -120,20 +120,18 @@ This is exactly what real HFT feed handlers do.
 
 
 ### How Order Book Engines work
-Start
- ↓
-Receive diffs → BUFFER
- ↓
-Fetch SNAPSHOT(REST) -> We use REST API to get the full order from Binance when we fall out of sync
- ↓
-Find first diff where:
-U ≤ lastUpdateId + 1 ≤ u
- ↓
-Apply diffs
- ↓
-Set synced = True
- ↓
-Continue live updates 
+```mermaid
+flowchart TD
+    A[Start]
+    B[Receive diffs → BUFFER]
+    C[Fetch SNAPSHOT (REST)]
+    D[Find first diff<br/>U ≤ lastUpdateId + 1 ≤ u]
+    E[Apply diffs]
+    F[Set synced = True]
+    G[Continue live updates]
+
+    A --> B --> C --> D --> E --> F --> G
+
 
 
 ### CODE EXPLAINATION OF ORDER_BOOK_ENGINE
