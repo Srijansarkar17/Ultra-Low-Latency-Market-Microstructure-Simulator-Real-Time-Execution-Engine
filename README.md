@@ -133,4 +133,19 @@ Apply diffs
  ↓
 Set synced = True
  ↓
-Continue live updates
+Continue live updates 
+
+
+### CODE EXPLAINATION OF ORDER_BOOK_ENGINE
+
+👉 You are defining a **new component** whose job is:
+
+> “Maintain the live order book for one trading symbol.”
+
+This class will:
+- Receive depth updates
+- Store bids & asks
+- Detect gaps
+- Tell you best bid/ask
+
+---
