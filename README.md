@@ -148,4 +148,4 @@ This class will:
 - Detect gaps
 - Tell you best bid/ask
 
----
+- self.buffer = deque(maxlen=5000) # Using Double Ended Queue for fast insertions and removals from both ends.
