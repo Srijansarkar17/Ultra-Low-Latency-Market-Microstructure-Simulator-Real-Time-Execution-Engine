@@ -96,6 +96,33 @@ class OrderBookEngine:
         
         self._apply_diff(diff)
 
+
+    # _try_sync() tries to connect the snapshot with the buffered depth updates so the order book becomes correct and usable.
+    def _try_sync(self): # It is called: After snapshot , Every time a new diff is buffered
+
+        if self.last_update_id is None: #. If you haven’t fetched the snapshot yet: You don’t know the starting state You can’t syncSo you just wait
+            return
+
+        while self.buffer: # Loop over buffered diffs This means: “As long as there are buffered updates, try to process them.
+            diff = self.buffer[0] # Look at the FIRST buffered diff,  Updates must be applied in order
+
+            if diff.u <= self.last_update_id: # Discard diffs that are too old
+                self.buffer.popleft()
+                continue
+
+            # Check the BRIDGING CONDITION (MOST IMPORTANT)
+
+            if diff.U <= self.last_update_id + 1 <= diff.u: #this means its correct
+                # Apply the diff and complete sync
+                self._apply_diff(diff) # Apply this diff to the order book
+                self.buffer.popleft() # Remove it from buffer
+                self.synced = True # Mark order book as synced
+                print("[ORDERBOOK] Book synced")
+
+            # still waiting for correct diff
+            return
+                
+                
     
         
 
