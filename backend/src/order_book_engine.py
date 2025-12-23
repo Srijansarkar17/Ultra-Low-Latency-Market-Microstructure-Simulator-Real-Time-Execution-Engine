@@ -5,13 +5,16 @@ from market_handler import DepthDiff
 
 class OrderBookEngine:
     def __init__(self, symbol: str, snapshot_limit: int=1000 ): # This __init__ function creates and prepares a fresh, empty order book that is not yet trusted until it syncs with the exchange.
-
+        
+        self.symbol = symbol.upper()
         # price -> quantity
         self.bids: Dict[float, float] = {} #stores the bids
         self.asks: Dict[float, float] = {} #stores the asks
 
         self.last_update_id: int | None=None # This stores the **latest sequence number** you have applied , - `None` → “I have no snapshot yet”
         self.synced: bool = False
+
+        self.snapshot_loaded: bool = False
 
         self.buffer = deque(maxlen=5000) # This is a **temporary waiting area** for depth updates. using Double Ended Queue
 
@@ -71,7 +74,17 @@ class OrderBookEngine:
 
     #Apply DIFF. ( on_depth_diff() decides what to do with each depth update: )
     def on_depth_diff(self, diff: DepthDiff):  # This function is called every time a depth update arrives from the WebSocket.
+        # STEP 1: first ever diff → trigger snapshot
+        if not self.snapshot_loaded:
+            self.buffer.append(diff)
+            self.load_snapshot()
+            self.snapshot_loaded = True
+            return
         if not self.synced:
+            print(
+            f"[BUFFERING] "
+            f"U={diff.U} u={diff.u} last={self.last_update_id}"
+            )
             self.buffer.append(diff) # Store the update in the buffer
             self._try_sync() # Try to see if snapshot + buffer can now be connected
             return

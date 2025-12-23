@@ -62,7 +62,8 @@ async def main(): # A coroutine that will run asynchronously (non-blocking).
                 print(
                     f"[BOOK] BB={bb} BA={ba} Spread={sp}"
                 )
-
+            else:
+                print("Book not synced")
 
 if __name__ == "__main__":
     asyncio.run(main())
