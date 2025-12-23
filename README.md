@@ -208,3 +208,5 @@ That’s the snapshot
 load_snapshot() -> this function is used to load the snapshot from Binance
 
 on_depth_diff() -> #Apply DIFF. ( on_depth_diff() decides what to do with each depth update: ), stores in buffer and checks if the current diff is too old and it detects gaps
+
+_try_sync() ->  tries to connect the snapshot with the buffered depth updates so the order book becomes correct and usable.
