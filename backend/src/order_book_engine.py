@@ -120,10 +120,53 @@ class OrderBookEngine:
                 print("[ORDERBOOK] Book synced")
 
             # still waiting for correct diff
-            return
-                
+            
+            
+
+    def _apply_diff(self, diff: DepthDiff): # _apply_diff() takes a depth update and modifies your local order book so it matches the exchange.
+        # It does not calculate anything — it just updates state.
+        """
+        Apply bid/ask updates
+        """
+        for price, qty in diff.bids:
+            if qty == 0.0: # Case A: Quantity = 0 → remove level
+                self.bids.pop(price, None) 
+                # Meaning:
+                # If Binance sends:
+                # ["90000.00", "0.00000000"]
+                # That means:
+                # “There is no bid at 90,000 anymore.”
+            else:
+                self.bids[price] = qty
+        
+        for price, qty in diff.asks:
+            if qty == 0.0:
+                self.asks.pop(price, None)
+            
+            else:
+                self.asks[price] = qty
+        
+        self.last_update_id = diff.u
                 
     
+    def best_bid(self):
+        if self.bids:
+            return max(self.bids.keys())
+        else:
+            None
+    
+    def best_ask(self):
+        if self.asks:
+            return min(self.asks.keys())
+        else:
+            None
+
+    def spread(self):
+        if not self.bids or not self.asks:
+            return None
+        
+        return self.best_ask() - self.best_bid()
+
         
 
 
