@@ -69,6 +69,42 @@ class OrderBookEngine:
         self.synced = False # Why? You fetched snapshot But you haven’t replayed buffered diffs yet So the book is not live yet.
 
 
+    #Apply DIFF. ( on_depth_diff() decides what to do with each depth update: )
+    def on_depth_diff(self, diff: DepthDiff):  # This function is called every time a depth update arrives from the WebSocket.
+        if not self.synced:
+            self.buffer.append(diff) # Store the update in the buffer
+            self._try_sync() # Try to see if snapshot + buffer can now be connected
+            return
+        
+        # Ignore old Updates
+        if diff.u <= self.last_update_id:  # If the update you received is older than what you already applied, ignore it.
+            return
+        # ( example:
+        # last_update_id = 100
+        # incoming diff: U=90, u=95
+        # ❌ This update is already outdated
+        # ✔ Ignore it safely)
+        
+
+        # Detect a GAP
+        if diff.U > self.last_update_id + 1:  # This is the most critical safety check. This means you missed some updates, your order book is now wrong
+
+            print("[ORDERBOOK] Gap Detected - > Resync")
+            self.load_snapshot()
+            self.buffer.clear()
+            return
+        
+        self._apply_diff(diff)
+
+    
+        
+
+
+
+
+
+
+
     
 
 

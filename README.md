@@ -202,3 +202,9 @@ That’s the snapshot
         # - Sequence gap detected ,  Expected next update id = last_update_id + 1, But received U > last_update_id + 1
         # - WebSocket reconnect - If your WS disconnects for even 1 second, then we need re-snapshot
         # - Engine restart / crash , then we Re-Snapshot
+
+
+#### Functions
+load_snapshot() -> this function is used to load the snapshot from Binance
+
+on_depth_diff() -> #Apply DIFF. ( on_depth_diff() decides what to do with each depth update: ), stores in buffer and checks if the current diff is too old and it detects gaps
