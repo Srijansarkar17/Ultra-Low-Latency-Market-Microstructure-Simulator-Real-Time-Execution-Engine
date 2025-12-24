@@ -212,3 +212,20 @@ on_depth_diff() -> #Apply DIFF. ( on_depth_diff() decides what to do with each d
 _try_sync() ->  tries to connect the snapshot with the buffered depth updates so the order book becomes correct and usable.
 
 _apply_diff() -> takes a depth update and modifies your local order book so it matches the exchange.
+
+
+
+## market_maker.py
+
+At first: 
+  This code creates the brain of a market-making bot that:
+
+  looks at the order book,
+
+  decides where to place buy/sell quotes,
+
+  tracks risk (inventory),
+
+  tracks profit & loss (PnL).
+
+  Nothing is trading yet — this is just setting up the brain.
