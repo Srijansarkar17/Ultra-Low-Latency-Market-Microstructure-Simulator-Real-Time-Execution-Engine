@@ -101,5 +101,43 @@ class MarketMaker:  # This class is your market-making engine. It decides prices
         else:
             None
     
-    
-        
+
+    def on_trade(self, trade: Trade): # This runs every time a trade happens in the market.
+        """
+        Simulate fills using trade prints
+        """
+        # A trade print means: Someone actually bought or sold at a real price.
+
+        if self.bid_quote and trade.price <= self.bid_quote.price: # What this checks: Do I currently have a buy order (bid_quote)? Did the market trade at or below my buy price? If yes → someone sold into me.
+        # Example
+        # Your buy quote:
+        # BUY 0.001 BTC @ 100.00
+        # Market trade:
+        # TRADE at 99.98
+        # ✅ Trade price ≤ your bid price
+        # 👉 Your buy order gets filled.
+            self.inventory += self.bid_quote.qty # You now own BTC.
+
+            self.realized_pnl -= trade.price*self.bid_quote.qty # You spent money, so PnL goes down.
+            print(f"[FILL] BUY {trade.price}")
+            self.bid_quote = None # Order is done.
+
+        if self.ask_quote and trade.price >= self.ask_quote.price:
+            # Similar to that of buy
+            self.inventory -= self.ask_quote.qty # You sold BTC
+            self.realized_pnl += trade.price*self.ask_quote.qty # We gained money, so PnL goes up
+
+            print(f"[FILL] SELL {trade.price}")
+
+            self.ask_quote = None # Order is done
+
+
+    def status(self): # This function is called when you want to see what’s going on inside your market maker
+        # Think of it like: “Show me my current position.”
+        return {
+            "inventory" : round(self.inventory, 6),
+            "pnl" : round(self.realized_pnl, 2),
+            "bid": self.bid_quote.price if self.bid_quote else None,
+            "ask": self.ask_quote.price if self.ask_quote else None,
+        }
+
