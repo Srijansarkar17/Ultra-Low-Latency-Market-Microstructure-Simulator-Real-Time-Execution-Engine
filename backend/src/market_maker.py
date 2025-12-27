@@ -39,3 +39,67 @@ class MarketMaker:  # This class is your market-making engine. It decides prices
 
         # PnL(Profit and Loss)
         self.realized_pnl = 0.0 # Tracks **actual money earned/lost** from completed trades. Buy → PnL decreases, Sell → PnL increases
+
+    
+    # This function decides where to place buy and sell orders every time the order book changes.
+    # Look at the market → decide my prices → place quotes safely
+    def on_book_update(self):
+        """
+        Called every time the order book updates
+        """
+        # This function runs again and again, whenever: a depth update arrives, best bid / best ask changes
+
+        if not self.book.synced:
+            return # if the order book is not fully synced yet, do NOTHING, because an unsynced book means wrong prices and wrong prices means loss
+        
+        bb = self.book.best_bid() # bb = highest price someone wants to buy
+        ba = self.book.best_ask() # ba = lowest price someone wants to sell
+
+        if bb is None or ba is None: # if either side is not there don't quote
+            return
+        
+        mid = (bb+ ba)/2 # Calculate Mid Price and Spread
+        spread = bb - ba
+
+        if spread > 0.5: # If the market is too wide, market is unstable, high risk, low liquidity, so dont place any orders. This is RISK MANAGEMENT
+            self.bid_quote = None
+            self.ask_quote = None
+            return
+        
+        # Inventory-Based Skew
+        skew = self.inventory * self.inventory_skew # This adjusts prices based on how much BTC you already hold.
+        # Example:
+        # inventory = +0.01 BTC (you bought too much)
+        # inventory_skew = 0.02
+        # skew = 0.01 × 0.02 = 0.0002
+        # Meaning: lower both prices, sell faster, stop buying, This prevents inventory blow-up.
+
+
+        # Calculate Quote Prices(Explaination with real life example in README.md)
+        bid_price = mid - self.spread_offset - skew
+        ask_price = mid + self.spread_offset - skew
+
+        # Enforce Inventory Limits
+        if self.inventory >= self.max_inventory: # If you already own too much BTC: Stop buying
+            bid_price = None
+
+        if self.inventory <= -self.max_inventory: # If you already sold too much BTC:Stop selling
+            ask_price = None
+
+        # Create Quotes
+        if bid_price:
+            self.bid_quote = (
+                Quote("buy", bid_price, self.quote_size)
+            )
+        else:
+            None
+
+        if ask_price:
+            self.ask_quote = (
+                Quote("sell", ask_price, self.quote_size)
+            )
+        else:
+            None
+    
+    
+        
