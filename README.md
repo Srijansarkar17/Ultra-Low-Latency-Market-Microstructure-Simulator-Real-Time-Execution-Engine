@@ -229,3 +229,8 @@ At first:
   tracks profit & loss (PnL).
 
   Nothing is trading yet — this is just setting up the brain.
+
+
+  on_book_update() -> This function decides where to place buy and sell orders every time the order book changes("""
+    Called every time the order book updates
+    """)
