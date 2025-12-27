@@ -231,7 +231,7 @@ At first:
   Nothing is trading yet — this is just setting up the brain.
 
 
-  on_book_update() -> This function decides where to place buy and sell orders every time the order book changes("""
+  ### on_book_update() -> This function decides where to place buy and sell orders every time the order book changes("""
     Called every time the order book updates
     """)
 
@@ -353,3 +353,92 @@ You raise your buy price (attract sellers)
 You raise your sell price (slow down selling)
 
 That’s exactly what skew does.
+
+
+
+  ### on_trade() -> This function pretends your limit orders got filled when market trades cross your quoted prices.
+
+  #### Explaination of on_trade() function:
+  This sentence is the key idea behind paper trading.
+
+  What is a limit order?
+
+  A limit order is you saying:
+
+  “I want to buy only if price is ≤ X”
+
+  “I want to sell only if price is ≥ Y”
+
+  ```
+  Example:
+
+  BUY  BTC @ 100.00
+  SELL BTC @ 100.10
+
+
+  You’re waiting, not forcing a trade.
+  ```
+
+  What is a market trade?
+
+A market trade is when someone else actually trades right now.
+
+
+```
+Example:
+
+Someone sells BTC at 99.98
+Someone buys BTC at 100.12
+```
+
+These are real trades happening in the market.
+
+What does “cross your quoted prices” mean?
+
+It means:
+
+🔹 BUY side
+
+If the market price goes DOWN to or below your buy price,
+someone would sell to you.
+
+Your BUY quote = 100.00
+Market trade = 99.98  ← crossed your price
+
+🔹 SELL side
+
+If the market price goes UP to or above your sell price,
+someone would buy from you.
+
+Your SELL quote = 100.10
+Market trade = 100.12 ← crossed your price
+
+What does “pretends your orders got filled” mean?
+
+Because:
+
+You are not actually sending orders to Binance
+
+You are only watching trade data
+
+So your code says:
+
+“If this trade would have filled my order on a real exchange,
+then I’ll pretend it did.”
+
+###### Simple Analogy (Real Life)
+
+Imagine you put a sign outside your shop:
+
+BUY apples at ₹100
+SELL apples at ₹110
+
+
+Now:
+
+Someone sells apples at ₹98 → they’d come to you
+
+Someone buys apples at ₹112 → they’d buy from you
+
+Even if you didn’t physically transact,
+you assume it happened because your price was better.

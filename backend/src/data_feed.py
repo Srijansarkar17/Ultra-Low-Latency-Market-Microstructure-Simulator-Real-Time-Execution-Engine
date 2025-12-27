@@ -5,13 +5,14 @@ import websockets
 from market_handler import MarketDecoder, DepthDiff, Trade
 from asyncio import Queue
 from order_book_engine import OrderBookEngine
+from market_maker import MarketMaker
 
 
 SYMBOL = "btcusdt"  # lowercase for WebSockets
 WS_URL = f"wss://stream.binance.com:9443/stream?streams={SYMBOL}@depth@100ms/{SYMBOL}@trade&timeUnit=MICROSECOND"
 
 # Consumer: Order Book Updater
-async def book_consumer(q: Queue, book: OrderBookEngine): # This function reads events from the queue and updates the order book
+async def book_consumer(q: Queue, book: OrderBookEngine, maker: MarketMaker): # This function reads events from the queue and updates the order book
     """
     Consumes decoded market events and updates the order book.
     """
@@ -20,9 +21,10 @@ async def book_consumer(q: Queue, book: OrderBookEngine): # This function reads 
 
         if isinstance(ev, DepthDiff):
             book.on_depth_diff(ev)
+            maker.on_book_update()
 
         elif isinstance(ev, Trade): # Trades do not change the book structure
-            pass
+            maker.on_trade(ev)
 
 #we create a single websocket that listens to two streams at once ,  we are getting both trade events and depth events in one socket
 async def main(): # A coroutine that will run asynchronously (non-blocking).
@@ -36,8 +38,11 @@ async def main(): # A coroutine that will run asynchronously (non-blocking).
     # IMPORTANT: snapshot before consuming diffs
     book.load_snapshot()
 
-    # Start consumer task
-    consumer_task = asyncio.create_task(book_consumer(q, book))
+    #Create market maker engine
+    maker = MarketMaker(book) # MarketMaker reads prices from the book
+
+    #Start Consumer once
+    consumer_task = asyncio.create_task(book_consumer(q, book, maker))
 
     async with websockets.connect(WS_URL, ping_interval=15, ping_timeout=10) as ws: # Opens the WebSocket connection to Binance. , pinginterval means sending an intenval every 15 seconds, ping_timeout means if Binance doesn't respond within 10 seconds, the connection closes.
 
@@ -56,11 +61,14 @@ async def main(): # A coroutine that will run asynchronously (non-blocking).
             await q.put(ev) # This hands off the event to the next stage (order book, strategy, logger, etc).
 
             if book.synced:
-                bb = book.best_bid()
-                ba = book.best_ask()
-                sp = book.spread()
+                s = maker.status()
                 print(
-                    f"[BOOK] BB={bb} BA={ba} Spread={sp}"
+                    f"[BOOK] BB={book.best_bid()} "
+                    f"BA={book.best_ask()} "
+                    f"INV={s['inventory']} "
+                    f"PNL={s['pnl']} "
+                    f"BID={s['bid']} "
+                    f"ASK={s['ask']}"
                 )
             else:
                 print("Book not synced")
