@@ -234,3 +234,122 @@ At first:
   on_book_update() -> This function decides where to place buy and sell orders every time the order book changes("""
     Called every time the order book updates
     """)
+
+  #### Explaination of this logic inside on_book_update()
+
+  Step 6: Calculate Quote Prices 
+  bid_price = mid - self.spread_offset - skew 
+  ask_price = mid + self.spread_offset - skew 
+  
+  ##### Without skew 
+  buy at mid - spread_offset 
+  sell at mid + spread_offset 
+  
+  ##### With skew 
+  inventory > 0 → prices move DOWN 
+  inventory < 0 → prices move UP
+
+  #### Explaination
+  et’s do this with a very concrete real-life example, step by step.
+
+🎯 Scenario: You are a BTC market maker
+Current market
+Best Bid (bb) = 100.00
+Best Ask (ba) = 100.10
+
+
+So:
+
+mid = (100.00 + 100.10) / 2 = 100.05
+
+
+You choose:
+
+spread_offset = 0.05
+inventory_skew = 0.02
+
+✅ Case 1: No inventory (neutral)
+inventory = 0
+skew = inventory × inventory_skew = 0
+
+Prices
+bid = mid - spread_offset = 100.05 - 0.05 = 100.00
+ask = mid + spread_offset = 100.05 + 0.05 = 100.10
+
+
+📌 You quote exactly at the edges of the book.
+
+💡 Interpretation
+You are balanced.
+No risk.
+Just collect spread.
+
+⚠️ Case 2: You bought too much BTC (inventory > 0)
+inventory = +1.0 BTC
+skew = 1.0 × 0.02 = 0.02
+
+Prices
+bid = 100.05 - 0.05 - 0.02 = 99.98
+ask = 100.05 + 0.05 - 0.02 = 100.08
+
+
+📉 Prices moved DOWN
+
+Side	Before	After
+Buy	100.00	99.98
+Sell	100.10	100.08
+Why?
+
+You already own too much BTC
+
+You want to:
+
+buy less → bid lower
+
+sell faster → ask lower
+
+📌 This pushes inventory back toward zero.
+
+⚠️ Case 3: You sold too much BTC (inventory < 0)
+inventory = -1.0 BTC
+skew = -1.0 × 0.02 = -0.02
+
+Prices
+bid = 100.05 - 0.05 - (-0.02) = 100.02
+ask = 100.05 + 0.05 - (-0.02) = 100.12
+
+
+📈 Prices moved UP
+
+Side	Before	After
+Buy	100.00	100.02
+Sell	100.10	100.12
+Why?
+
+You are short BTC
+
+You want to:
+
+buy faster → bid higher
+
+sell less → ask higher
+
+📌 Again, inventory moves back toward zero.
+
+🧠 Real-Life Analogy (Very Intuitive)
+
+Imagine you run a gold exchange shop.
+
+You have TOO MUCH gold
+
+You lower your buy price (don’t want more gold)
+
+You lower your sell price (want to get rid of gold fast)
+
+You have TOO LITTLE gold
+
+You raise your buy price (attract sellers)
+
+You raise your sell price (slow down selling)
+
+That’s exactly what skew does.
