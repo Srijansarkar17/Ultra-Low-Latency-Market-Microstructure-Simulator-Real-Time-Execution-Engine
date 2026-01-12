@@ -442,3 +442,103 @@ Someone buys apples at ₹112 → they’d buy from you
 
 Even if you didn’t physically transact,
 you assume it happened because your price was better.
+
+
+### Correction of the PnL Logic Error
+We counted "money recieved" as profit, whereas the profit should only happen after you both BUY and SELL
+
+##### Example
+🏪 Real-life example: Fruit Shop 🍎
+
+Imagine you run a fruit shop (you = market maker).
+
+Prices in the market
+
+People buy apples at ₹99
+
+People sell apples at ₹101
+
+So the spread = ₹2
+
+❌ What your code is doing now (WRONG)
+Step 1: You SELL first
+
+You sell 1 apple at ₹101
+
+Your code says:
+
+Profit += 101
+
+
+💥 This is the bug
+
+Because…
+
+Reality:
+
+You gave away an apple
+
+You don’t own it anymore
+
+You haven’t bought it yet
+
+This is cash flow, NOT profit.
+
+Step 2: You STOP selling
+
+Your inventory becomes:
+
+inventory = -1 apple
+
+
+Your risk control says:
+
+“I am short apples, stop selling”
+
+✅ This part is CORRECT.
+
+But your PnL shows:
+Profit = ₹101 ❌
+
+
+That’s impossible.
+
+You didn’t earn ₹101.
+You just received money for something you owe.
+
+✅ What PROFIT actually means
+Profit happens only when you COMPLETE THE CYCLE
+Correct cycle:
+
+Buy low
+
+Sell high
+OR
+
+Sell high
+
+Buy low
+
+✅ Correct behavior with the same example
+Step 1: SELL first (still no profit)
+
+You sell 1 apple @ ₹101
+
+Thing	Value
+Inventory	-1 apple
+Cash	+₹101
+Profit	₹0 ✅
+
+No profit yet.
+
+Step 2: BUY later
+
+You buy 1 apple @ ₹99
+
+Now calculate profit:
+
+Profit = Sell Price - Buy Price
+Profit = 101 - 99 = ₹2
+
+
+🎉 THAT is real profit.
