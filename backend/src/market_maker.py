@@ -151,9 +151,15 @@ class MarketMaker:  # This class is your market-making engine. It decides prices
             qty = self.ask_quote.qty
             price = trade.price
 
-            #realized_pnl = sell_price - avg_buy_price
-            self.realized_pnl += (price - self.avg_price) * qty
+            if self.inventory > 0:
+                # Closing a LONG
+                self.realized_pnl += (price - self.avg_price) * qty
+            else: 
+                # Opening a SHORT
+                self.avg_price = price 
+
             self.inventory -= qty
+
             print(f"[FILL] SELL {price}")
             self.ask_quote = None
 
