@@ -19,6 +19,7 @@ class MarketMaker:  # This class is your market-making engine. It decides prices
             max_inventory: float = 0.01,
             spread_offset: float = 0.01,
             inventory_skew: float = 0.02,
+            avg_price: float = 0.0,
     ):
         self.book = book # Store a reference to your **live order book, The market maker **reads prices from here**: - best bid - best ask - spread
 
@@ -39,6 +40,9 @@ class MarketMaker:  # This class is your market-making engine. It decides prices
 
         # PnL(Profit and Loss)
         self.realized_pnl = 0.0 # Tracks **actual money earned/lost** from completed trades. Buy → PnL decreases, Sell → PnL increases
+
+        #To correct the mistake of PnL
+        self.avg_price = 0.0
 
     
     # This function decides where to place buy and sell orders every time the order book changes.
@@ -108,28 +112,51 @@ class MarketMaker:  # This class is your market-making engine. It decides prices
         """
         # A trade print means: Someone actually bought or sold at a real price.
 
-        if self.bid_quote and trade.price <= self.bid_quote.price: # What this checks: Do I currently have a buy order (bid_quote)? Did the market trade at or below my buy price? If yes → someone sold into me.
-        # Example
-        # Your buy quote:
-        # BUY 0.001 BTC @ 100.00
-        # Market trade:
-        # TRADE at 99.98
-        # ✅ Trade price ≤ your bid price
-        # 👉 Your buy order gets filled.
-            self.inventory += self.bid_quote.qty # You now own BTC.
+        if self.bid_quote and trade.price <= self.bid_quote.price: # What this checks: Do I currently have a buy order (bid_quote)?  # You had a buy order in the market,  Someone traded at a price equal or lower So your buy order was filled
 
-            self.realized_pnl -= trade.price*self.bid_quote.qty # You spent money, so PnL goes down.
-            print(f"[FILL] BUY {trade.price}")
-            self.bid_quote = None # Order is done.
+            # This code updates your average buy price when your buy order gets filled.
+            # Why this matters:
+                # You might buy BTC multiple times at different prices
+                # To calculate real profit later, you need to know:
+                # “On average, at what price did I buy my BTC?”
+                # That’s exactly what avg_price represents.
+            ##Fixing the BUY logic
+            qty = self.bid_quote.qty
+            price = trade.price
+
+            # Two cases exist:
+            # Case 1: You already owned BTC
+            if self.inventory != 0:
+                current_value = self.avg_price * abs(self.inventory)  # How much money your existing BTC is worth (at average price), Example : Inventory = 0.02 BTC, avg_price = 86,000, So , current_value = 0.02 × 86,000 = 1,720
+                new_value = price*qty # This is the value of new BTC you just bought. Example: 0.01 × 87,000 = 870
+                total_quantity = abs(self.inventory) + qty  # Total BTC you now hold:  Example: 0.02 + 0.01 = 0.03 BTC
+
+                self.avg_price = (current_value + new_value) / total_quantity # Recalculate average price, Example: 
+                # avg_price = (1720 + 870) / 0.03
+                        #   = 2590 / 0.03
+                        #   = 86,333, Your new average buy price is 86,333.
+            
+            # Case 2: This is your first BUY
+            else:
+                # If there was no inventory before, avg price is simply the new price
+                self.avg_price = price # Your average price is simply the buy price
+
+
+            self.inventory += qty
+            print(f"[FILL] BUY {price}")
+            self.bid_quote = None
 
         if self.ask_quote and trade.price >= self.ask_quote.price:
             # Similar to that of buy
-            self.inventory -= self.ask_quote.qty # You sold BTC
-            self.realized_pnl += trade.price*self.ask_quote.qty # We gained money, so PnL goes up
+            qty = self.ask_quote.qty
+            price = trade.price
 
-            print(f"[FILL] SELL {trade.price}")
+            #realized_pnl = sell_price - avg_buy_price
+            self.realized_pnl += (price - self.avg_price) * qty
+            self.inventory -= qty
+            print(f"[FILL] SELL {price}")
+            self.ask_quote = None
 
-            self.ask_quote = None # Order is done
 
 
     def status(self): # This function is called when you want to see what’s going on inside your market maker
