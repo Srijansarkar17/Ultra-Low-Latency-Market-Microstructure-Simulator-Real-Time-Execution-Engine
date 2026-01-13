@@ -542,3 +542,84 @@ Profit = 101 - 99 = ₹2
 
 
 🎉 THAT is real profit.
+
+
+### Explaination of new logic of realized_pnl
+
+🛒 Real-life example (fruit shop 🍎)
+Step 1: You buy apples
+
+Buy 10 apples at ₹100 each
+
+avg_price = 100
+
+No profit yet ❌
+
+Step 2: You sell apples
+
+Sell 10 apples at ₹105 each
+
+Selling price = 105
+
+Now compute profit:
+
+(price - avg_price) × qty
+= (105 - 100) × 10
+= 5 × 10
+= ₹50
+
+
+So:
+
+self.realized_pnl += 50
+
+
+✅ You actually made ₹50.
+
+rading example (BTC)
+Buy first → Sell later (LONG trade)
+
+1️⃣ Buy 0.01 BTC at ₹91,200
+
+avg_price = 91200
+inventory = +0.01
+
+
+2️⃣ Sell 0.01 BTC at ₹91,250
+
+profit = (91250 - 91200) × 0.01
+        = 50 × 0.01
+        = ₹0.50
+
+self.realized_pnl += 0.50
+
+
+✅ Real profit.
+
+
+
+### Bug Related to classic market-maker bug related to SHORT positions and avg_price handling.
+We are treating a SELL as if it always closes a BUY
+self.realized_pnl += (price - self.avg_price) * qty is only correct when you are selling BTC that you previously BOUGHT
+
+But in your log:
+
+👉 You sold first
+👉 That means you opened a SHORT position
+👉 There was no buy yet to close
+
+##### What is missing in your logic
+
+You currently handle only LONG logic correctly:
+
+Buy → set avg_price
+
+Sell → (sell - avg_buy) × qty
+
+But for SHORT trades, logic is inverted:
+
+SHORT logic (very important)
+
+SELL first → this sets avg_price for the short
+
+BUY later → this realizes PnL

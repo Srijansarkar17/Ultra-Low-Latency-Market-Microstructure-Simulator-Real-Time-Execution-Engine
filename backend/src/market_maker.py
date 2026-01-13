@@ -123,24 +123,32 @@ class MarketMaker:  # This class is your market-making engine. It decides prices
             ##Fixing the BUY logic
             qty = self.bid_quote.qty
             price = trade.price
+            prev_inventory = self.inventory
 
-            # Two cases exist:
-            # Case 1: You already owned BTC
-            if self.inventory != 0:
-                current_value = self.avg_price * abs(self.inventory)  # How much money your existing BTC is worth (at average price), Example : Inventory = 0.02 BTC, avg_price = 86,000, So , current_value = 0.02 × 86,000 = 1,720
-                new_value = price*qty # This is the value of new BTC you just bought. Example: 0.01 × 87,000 = 870
-                total_quantity = abs(self.inventory) + qty  # Total BTC you now hold:  Example: 0.02 + 0.01 = 0.03 BTC
-
-                self.avg_price = (current_value + new_value) / total_quantity # Recalculate average price, Example: 
-                # avg_price = (1720 + 870) / 0.03
-                        #   = 2590 / 0.03
-                        #   = 86,333, Your new average buy price is 86,333.
+            # BUY closes a SHORT
+            if prev_inventory < 0:
+                self.realized_pnl += (self.avg_price - price) * qty
             
-            # Case 2: This is your first BUY
-            else:
-                # If there was no inventory before, avg price is simply the new price
-                self.avg_price = price # Your average price is simply the buy price
+            # BUY opens or adds to LONG
+            if prev_inventory >= 0:
+                total_quantity = prev_inventory + qty
+                if total_quantity > 0:
+                    if prev_inventory > 0:
+                         # Value of previously owned units
+                         previous_value = self.avg_price * prev_inventory
 
+                         # Value of newly bought units
+                         new_value = price * qty
+
+                         # Total units after buying
+                         total_quantity = prev_inventory + qty
+
+                         # Update the average price using weighted average
+                         self.avg_price = (previous_value + new_value)/ total_quantity
+                    
+                    else:
+                        # If this is the first buy (no previous inventory)
+                        self.avg_price = price
 
             self.inventory += qty
             print(f"[FILL] BUY {price}")
@@ -150,7 +158,9 @@ class MarketMaker:  # This class is your market-making engine. It decides prices
             # Similar to that of buy
             qty = self.ask_quote.qty
             price = trade.price
+            prev_inventory = self.inventory
 
+            # SELL closes a LONG
             if self.inventory > 0:
                 # Closing a LONG
                 self.realized_pnl += (price - self.avg_price) * qty
@@ -159,9 +169,11 @@ class MarketMaker:  # This class is your market-making engine. It decides prices
                 self.avg_price = price 
 
             self.inventory -= qty
-
             print(f"[FILL] SELL {price}")
             self.ask_quote = None
+
+        if self.inventory == 0:
+            self.avg_price = 0.0
 
 
 
