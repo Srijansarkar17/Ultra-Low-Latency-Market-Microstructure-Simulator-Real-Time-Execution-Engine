@@ -6,13 +6,25 @@ from market_handler import MarketDecoder, DepthDiff, Trade
 from asyncio import Queue
 from order_book_engine import OrderBookEngine
 from market_maker import MarketMaker
-
+from volatility_prediction_ml.feature_logger import FeatureLogger
 
 SYMBOL = "btcusdt"  # lowercase for WebSockets
 WS_URL = f"wss://stream.binance.com:9443/stream?streams={SYMBOL}@depth@100ms/{SYMBOL}@trade&timeUnit=MICROSECOND"
 
+def compute_imbalance(book, depth=5):
+    bids = sorted(book.bids.items(), reverse=True)[:depth]
+    asks = sorted(book.asks.items())[:depth]
+
+    bid_qty = sum(qty for _, qty in bids)
+    ask_qty = sum(qty for _, qty in asks)
+
+    if bid_qty + ask_qty == 0:
+        return 0.0
+
+    return (bid_qty - ask_qty) / (bid_qty + ask_qty)
+
 # Consumer: Order Book Updater
-async def book_consumer(q: Queue, book: OrderBookEngine, maker: MarketMaker): # This function reads events from the queue and updates the order book
+async def book_consumer(q: Queue, book: OrderBookEngine, maker: MarketMaker, trade_count): # This function reads events from the queue and updates the order book
     """
     Consumes decoded market events and updates the order book.
     """
@@ -25,9 +37,13 @@ async def book_consumer(q: Queue, book: OrderBookEngine, maker: MarketMaker): # 
 
         elif isinstance(ev, Trade): # Trades do not change the book structure
             maker.on_trade(ev)
+            trade_count["count"] += 1
 
 #we create a single websocket that listens to two streams at once ,  we are getting both trade events and depth events in one socket
 async def main(): # A coroutine that will run asynchronously (non-blocking).
+    logger = FeatureLogger("features.csv")
+    last_spread = None
+    trade_count = {"count":0}
     q: Queue = Queue(maxsize=10000) # This queue will store clean events (Trade or DepthDiff). Later, your order book or strategy will read from this queue. maxsize=10000 → protects you from memory exploding.
 
     decoder = MarketDecoder(expect_microseconds=True) #creates the decoder object, uses the class MarketDecoder from market_handler.py
@@ -42,7 +58,8 @@ async def main(): # A coroutine that will run asynchronously (non-blocking).
     maker = MarketMaker(book) # MarketMaker reads prices from the book
 
     #Start Consumer once
-    consumer_task = asyncio.create_task(book_consumer(q, book, maker))
+    consumer_task = asyncio.create_task(book_consumer(q, book, maker, trade_count))
+
 
     async with websockets.connect(WS_URL, ping_interval=15, ping_timeout=10) as ws: # Opens the WebSocket connection to Binance. , pinginterval means sending an intenval every 15 seconds, ping_timeout means if Binance doesn't respond within 10 seconds, the connection closes.
 
@@ -62,6 +79,16 @@ async def main(): # A coroutine that will run asynchronously (non-blocking).
 
             if book.synced:
                 s = maker.status()
+                bb = book.best_bid()
+                ba = book.best_ask()
+                mid = (bb + ba) / 2
+                spread = ba - bb
+                if last_spread is None:
+                    spread_change = 0.0
+                else:
+                    spread_change = spread - last_spread
+
+                imbalance = compute_imbalance(book)
                 print(
                     f"[BOOK] BB={book.best_bid()} "
                     f"BA={book.best_ask()} "
@@ -70,6 +97,17 @@ async def main(): # A coroutine that will run asynchronously (non-blocking).
                     f"BID={s['bid']} "
                     f"ASK={s['ask']}"
                 )
+                logger.log(
+                    ts_recv_us,
+                    mid,
+                    spread,
+                    spread_change,
+                    imbalance,
+                    trade_count["count"]
+                    )
+
+                last_spread = spread
+                trade_count["count"] = 0
             else:
                 print("Book not synced")
 

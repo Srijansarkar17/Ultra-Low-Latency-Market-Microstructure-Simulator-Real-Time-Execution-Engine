@@ -3,6 +3,7 @@ from typing import Optional
 from market_handler import Trade  # Imports **real trade events** coming from Binance
 from order_book_engine import OrderBookEngine # Imports your order book.
 
+
 # The market maker does NOT build prices itself. It reads the book to know where the market is.
 
 @dataclass
@@ -64,6 +65,8 @@ class MarketMaker:  # This class is your market-making engine. It decides prices
         
         mid = (bb+ ba)/2 # Calculate Mid Price and Spread
         spread = bb - ba
+
+        
 
         if spread > 0.5: # If the market is too wide, market is unstable, high risk, low liquidity, so dont place any orders. This is RISK MANAGEMENT
             self.bid_quote = None
