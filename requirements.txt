@@ -1,0 +1,9 @@
+# Core market-microstructure simulator
+requests>=2.31.0
+websockets>=12.0
+
+# Volatility predictor (volatility_prediction_ml/volatility_predictor.py)
+xgboost>=2.0.0
+scikit-learn>=1.3.0
+pandas>=2.0.0
+numpy>=1.24.0
