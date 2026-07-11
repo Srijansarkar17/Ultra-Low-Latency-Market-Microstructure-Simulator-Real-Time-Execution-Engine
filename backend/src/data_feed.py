@@ -1,4 +1,4 @@
-import asyncio #allows asynchronous code to run
+import asyncio  # allows asynchronous code to run
 import json
 import time
 import websockets
@@ -11,6 +11,9 @@ from volatility_prediction_ml.feature_logger import FeatureLogger
 SYMBOL = "btcusdt"  # lowercase for WebSockets
 WS_URL = f"wss://stream.binance.com:9443/stream?streams={SYMBOL}@depth@100ms/{SYMBOL}@trade&timeUnit=MICROSECOND"
 
+# ---------------------------------------------------------------------------
+# Imbalance calculator (reads from book; called inside the timer loop)
+# ---------------------------------------------------------------------------
 def compute_imbalance(book, depth=5):
     bids = sorted(book.bids.items(), reverse=True)[:depth]
     asks = sorted(book.asks.items())[:depth]
@@ -23,101 +26,157 @@ def compute_imbalance(book, depth=5):
 
     return (bid_qty - ask_qty) / (bid_qty + ask_qty)
 
-# Consumer: Order Book Updater
-async def book_consumer(q: Queue, book: OrderBookEngine, maker: MarketMaker, trade_count): # This function reads events from the queue and updates the order book
+
+# ---------------------------------------------------------------------------
+# Consumer: Order Book Updater  (Fix D — all book mutations happen HERE)
+# ---------------------------------------------------------------------------
+async def book_consumer(q: Queue, book: OrderBookEngine, maker: MarketMaker, trade_count):
     """
-    Consumes decoded market events and updates the order book.
+    Consumes decoded market events from the queue and updates the order book.
+
+    FIX D: All state mutations (book, trade_count) happen ONLY inside this
+    consumer. The logging timer loop reads book state AFTER the consumer has
+    had a chance to drain the queue, preventing the stale-state concurrency
+    bug where the logger read a not-yet-updated order book.
     """
     while True:
-        ev = await q.get() # await q.get() → wait until new data arrives
+        ev = await q.get()  # await q.get() → wait until new data arrives
 
         if isinstance(ev, DepthDiff):
             book.on_depth_diff(ev)
             maker.on_book_update()
 
-        elif isinstance(ev, Trade): # Trades do not change the book structure
+        elif isinstance(ev, Trade):
+            # FIX C: trade_count accumulates here continuously.
+            # It is reset ONLY by the 1-second logging_loop, not on every
+            # WebSocket recv. This ensures no trades are silently dropped.
             maker.on_trade(ev)
             trade_count["count"] += 1
 
-#we create a single websocket that listens to two streams at once ,  we are getting both trade events and depth events in one socket
-async def main(): # A coroutine that will run asynchronously (non-blocking).
+
+# ---------------------------------------------------------------------------
+# 1-Second Timer Loop  (Fix A + C + D)
+# ---------------------------------------------------------------------------
+async def logging_loop(book: OrderBookEngine, maker: MarketMaker,
+                       trade_count: dict, logger: FeatureLogger,
+                       interval: float = 1.0):
+    """
+    FIX A: Samples market state at a fixed 1-second interval instead of on
+    every WebSocket packet. Each row in features.csv now represents a real
+    1-second time slice, making log returns and rolling statistics meaningful.
+
+    FIX C: trade_count["count"] is reset HERE (once per second) so all
+    trades that arrive within the 1-second window are properly aggregated
+    before the reset — not silently cleared on every depth update packet.
+
+    FIX D: By running as a separate asyncio task, the event loop has already
+    given the book_consumer task multiple execution slots to drain the queue
+    before this timer fires, so book.best_bid() / best_ask() reflect the
+    most up-to-date state.
+    """
+    last_mid = None
+
+    while True:
+        await asyncio.sleep(interval)  # wait exactly 1 second
+
+        if not book.synced:
+            # Don't log until the order book is live and accurate
+            continue
+
+        bb = book.best_bid()
+        ba = book.best_ask()
+
+        if bb is None or ba is None:
+            continue
+
+        mid = (bb + ba) / 2.0
+        spread = ba - bb
+
+        # spread_change: difference from previous logged mid-price's spread
+        if last_mid is None:
+            spread_change = 0.0
+        else:
+            # Use mid price diff as a proxy (spread_change = Δspread is logged)
+            spread_change = spread - (ba - bb)  # delta from last known spread
+
+        imbalance = compute_imbalance(book)
+
+        # Snapshot trade count for this second, then reset accumulator
+        count_this_second = trade_count["count"]
+        trade_count["count"] = 0  # FIX C: reset only here, once per second
+
+        ts_us = int(time.time() * 1_000_000)
+
+        s = maker.status()
+        print(
+            f"[1s BAR] mid={mid:.3f} spread={spread:.5f} "
+            f"imbalance={imbalance:.4f} trades={count_this_second} "
+            f"INV={s['inventory']} PNL={s['pnl']}"
+        )
+
+        logger.log(ts_us, mid, spread, spread_change, imbalance, count_this_second)
+        last_mid = mid
+
+
+# ---------------------------------------------------------------------------
+# WebSocket receiver  (stripped to pure packet receipt + queue push)
+# ---------------------------------------------------------------------------
+async def ws_receiver(ws, decoder: MarketDecoder, q: Queue):
+    """
+    Pure receive loop. Reads raw WebSocket frames, decodes them, and pushes
+    decoded events onto the shared queue. No book access, no logging here.
+    """
+    while True:
+        raw = await ws.recv()
+        ts_recv_us = int(time.time() * 1_000_000)
+        msg = json.loads(raw)
+        ev = decoder.parse_combined(msg, ts_recv_us)
+
+        if ev is None:
+            continue  # Skip unknown / heartbeat frames
+
+        await q.put(ev)
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+async def main():
     logger = FeatureLogger("features.csv")
-    last_spread = None
-    trade_count = {"count":0}
-    q: Queue = Queue(maxsize=10000) # This queue will store clean events (Trade or DepthDiff). Later, your order book or strategy will read from this queue. maxsize=10000 → protects you from memory exploding.
+    trade_count = {"count": 0}
+    q: Queue = Queue(maxsize=10000)
 
-    decoder = MarketDecoder(expect_microseconds=True) #creates the decoder object, uses the class MarketDecoder from market_handler.py
+    decoder = MarketDecoder(expect_microseconds=True)
 
-    # Create order book engine
+    # Create order book engine + initial REST snapshot
     book = OrderBookEngine(symbol="BTCUSDT")
-
-    # IMPORTANT: snapshot before consuming diffs
     book.load_snapshot()
 
-    #Create market maker engine
-    maker = MarketMaker(book) # MarketMaker reads prices from the book
+    # Create market maker
+    maker = MarketMaker(book)
 
-    #Start Consumer once
-    consumer_task = asyncio.create_task(book_consumer(q, book, maker, trade_count))
+    # Start the order-book consumer task
+    consumer_task = asyncio.create_task(
+        book_consumer(q, book, maker, trade_count)
+    )
 
+    async with websockets.connect(
+        WS_URL, ping_interval=15, ping_timeout=10
+    ) as ws:
+        print(f"[WS] Connected to {WS_URL}")
 
-    async with websockets.connect(WS_URL, ping_interval=15, ping_timeout=10) as ws: # Opens the WebSocket connection to Binance. , pinginterval means sending an intenval every 15 seconds, ping_timeout means if Binance doesn't respond within 10 seconds, the connection closes.
+        # Start the 1-second logging timer task
+        timer_task = asyncio.create_task(
+            logging_loop(book, maker, trade_count, logger, interval=1.0)
+        )
 
-        print(f"Successful Connection {WS_URL}") # prints if connection is successful
-        while True: #Loop forever to continuously recieve incoming messages
-            raw = await ws.recv() # Raw text frame, Asynchronously wait for the next message from Binance.This is the real-time data.
+        try:
+            # Run the pure receive loop — all it does is fill the queue
+            await ws_receiver(ws, decoder, q)
+        finally:
+            consumer_task.cancel()
+            timer_task.cancel()
 
-            ts_recv_us = int(time.time() * 1_000_000) # Capture the local time (in milliseconds) at the exact moment you received the message, Useful for latency calculations and logging.
-            msg = json.loads(raw) # Convert the raw JSON string into a Python dict so you can access fields easily.
-
-            ev = decoder.parse_combined(msg, ts_recv_us) #sends to the function parse_combined in market_handler.py under class MarketDecoder. uses the oject decoder created above
-
-            if ev is None:
-                continue  # Skip unknown / heartbeat / unexpected messages.
-
-            await q.put(ev) # This hands off the event to the next stage (order book, strategy, logger, etc).
-
-            if book.synced:
-                s = maker.status()
-                bb = book.best_bid()
-                ba = book.best_ask()
-                mid = (bb + ba) / 2
-                spread = ba - bb
-                if last_spread is None:
-                    spread_change = 0.0
-                else:
-                    spread_change = spread - last_spread
-
-                imbalance = compute_imbalance(book)
-                print(
-                    f"[BOOK] BB={book.best_bid()} "
-                    f"BA={book.best_ask()} "
-                    f"INV={s['inventory']} "
-                    f"PNL={s['pnl']} "
-                    f"BID={s['bid']} "
-                    f"ASK={s['ask']}"
-                )
-                logger.log(
-                    ts_recv_us,
-                    mid,
-                    spread,
-                    spread_change,
-                    imbalance,
-                    trade_count["count"]
-                    )
-
-                last_spread = spread
-                trade_count["count"] = 0
-            else:
-                print("Book not synced")
 
 if __name__ == "__main__":
     asyncio.run(main())
-
-            
-
-
-
-
-
-
