@@ -1,5 +1,121 @@
+# Market Microstructure Simulator
+
+A real-time, event-driven trading engine that ingests live Binance Level-2
+order book streams through a **Kafka-backed pipeline**, runs inventory-aware
+market-making logic, and logs ML features for volatility prediction.
+
+---
+
+## Architecture — Kafka Event-Driven Pipeline
+
+```
+Binance WebSocket (L2 depth + trades)
+          │
+          ▼
+ ┌─────────────────────┐
+ │  kafka_producer.py  │   WebSocket → JSON → Kafka
+ └────────┬────────────┘
+          │
+          │  Kafka Broker (localhost:9092)
+          │  ├── Topic: market.depth   (DepthDiff events, 100ms cadence)
+          │  └── Topic: market.trades  (Trade events, real-time)
+          │
+   ┌──────┴──────────────────────────┐
+   │                                 │
+   ▼                                 ▼
+ ┌────────────────────────┐   ┌──────────────────────────────┐
+ │ kafka_consumer_         │   │ kafka_consumer_logger.py     │
+ │ orderbook.py            │   │                              │
+ │                         │   │  Consumer Group:             │
+ │  Consumer Group:        │   │  feature-logger-group        │
+ │  orderbook-engine-group │   │                              │
+ │                         │   │  • Maintains local book copy │
+ │  • OrderBookEngine      │   │  • Computes imbalance        │
+ │  • MarketMaker          │   │  • Logs 1s feature rows      │
+ │  • PnL attribution      │   │    to features.csv           │
+ │  • Inventory skew       │   └──────────────────────────────┘
+ └─────────────────────────┘
+```
+
+Each service runs as an **independent Python process** with its own Kafka
+consumer group. They share topics but have fully isolated read cursors —
+crash one, and the other keeps running unaffected.
+
+---
+
+## Quick Start
+
+### Prerequisites
+- Docker + Docker Compose
+- Python 3.10+
+
+### 1. Start Kafka
+
+```bash
+# From the project root
+docker compose up -d
+```
+
+Kafka UI is available at **http://localhost:8080** to inspect topics and messages.
+
+### 2. Install Python dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 3. Create Kafka topics (first-time only)
+
+```bash
+cd backend/src
+python kafka_admin.py
+```
+
+### 4. Run all three services (three separate terminals)
+
+**Terminal 1 — Producer (WebSocket → Kafka)**
+```bash
+cd backend/src
+python kafka_producer.py
+```
+
+**Terminal 2 — Order Book + Market Maker Consumer**
+```bash
+cd backend/src
+python kafka_consumer_orderbook.py
+```
+
+**Terminal 3 — ML Feature Logger Consumer**
+```bash
+cd backend/src
+python kafka_consumer_logger.py
+```
+
+> **Note:** The original single-process entry point (`data_feed.py`) is still
+> available if you want to run without Kafka.
+
+---
+
+## Files
+
+| File | Purpose |
+|---|---|
+| `docker-compose.yml` | Kafka + Zookeeper + Kafka UI |
+| `backend/src/kafka_producer.py` | WebSocket → Kafka producer |
+| `backend/src/kafka_consumer_orderbook.py` | OrderBook + MarketMaker consumer |
+| `backend/src/kafka_consumer_logger.py` | ML feature logger consumer |
+| `backend/src/kafka_admin.py` | One-shot topic creation |
+| `backend/src/serializers.py` | Shared JSON encode/decode for events |
+| `backend/src/data_feed.py` | Legacy single-process entry point |
+| `backend/src/order_book_engine.py` | L2 order book with snapshot-sync |
+| `backend/src/market_maker.py` | Inventory-aware market maker + PnL |
+| `backend/src/market_handler.py` | Binance WebSocket decoder |
+
+---
+
 ## data_feed.py
 This creates a single websocket that listens to two streams at once : trade events and depth events
+
 
 ### Trade Events
 Trade events (also known as "trade feeds") provide a real-time record of every transaction that has been executed and matched on the exchange. This data stream essentially confirms completed transactions and is the basis for the "last traded price" and volume metrics. 
